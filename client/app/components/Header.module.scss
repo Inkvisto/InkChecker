@@ -1,0 +1,29 @@
+
+.container {
+    margin: 10px;
+}
+
+.nav {
+    width: 100%;
+    display: flex;
+    justify-content: space-between;
+    li{
+        cursor: pointer;
+        padding: 5px;
+        &:hover{
+            transition-duration: .3s ;
+            transition-property: box-shadow;
+        
+            &:hover,
+            &:focus,
+            &:active {
+                box-shadow: 0 0 8px rgba(0, 0, 0, .6);
+            }
+        }
+    }
+}
+
+
+.selected {
+    border-bottom: 1px solid black;
+}

@@ -1,0 +1,21 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "DoubleEndedQueue",
+  "sourceName": "contracts/utils/structs/DoubleEndedQueue.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "Empty",
+      "type": "error"
+    },
+    {
+      "inputs": [],
+      "name": "OutOfBounds",
+      "type": "error"
+    }
+  ],
+  "bytecode": "0x60566037600b82828239805160001a607314602a57634e487b7160e01b600052600060045260246000fd5b30600052607381538281f3fe73000000000000000000000000000000000000000030146080604052600080fdfea26469706673582212200344e2be5a605c02be3c007e92403239998e0c13f8478f761b4ccf2aec55b34464736f6c63430008110033",
+  "deployedBytecode": "0x73000000000000000000000000000000000000000030146080604052600080fdfea26469706673582212200344e2be5a605c02be3c007e92403239998e0c13f8478f761b4ccf2aec55b34464736f6c63430008110033",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
