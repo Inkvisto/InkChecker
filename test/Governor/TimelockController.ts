@@ -1,14 +1,12 @@
 import { expect } from 'chai';
 import { ethers } from "hardhat";
-import { SignerWithAddress } from "@nomiclabs/hardhat-ethers/signers";
-import { CallReceiverMock, Implementation2, Ink_Governor, Ink_Votes, Ink_Votes__factory, IVotes, TimelockController } from '../../typechain-types';
-import { time } from '@nomicfoundation/hardhat-network-helpers'
+import { loadFixture, time } from '@nomicfoundation/hardhat-network-helpers'
 import { Address } from 'hardhat-deploy/types';
 import { expectRevert } from '../utils/expectRevert';
 import { MINDELAY, random_salt, ZERO_ADDRESS, ZERO_BYTES32 } from '../utils/constants';
 import { expectEvent, notEmitted } from '../utils/ExpectEvent';
 import { toEthersBN } from '../utils/typeConverters';
-/*
+
 
 const genOperation = (target: string, value: string, data: string, predecessor: string, salt: string) => {
 
@@ -45,38 +43,30 @@ const genOperationBatch = (targets: string[], values: string[], payloads: string
   return { id, targets, values, payloads, predecessor, salt };
 }
 
+const TIMELOCK_ADMIN_ROLE = ethers.utils.solidityKeccak256(['string'], ['TIMELOCK_ADMIN_ROLE']);
+const PROPOSER_ROLE = ethers.utils.solidityKeccak256(['string'], ['PROPOSER_ROLE']);
+const EXECUTOR_ROLE = ethers.utils.solidityKeccak256(['string'], ['EXECUTOR_ROLE']);
+const CANCELLER_ROLE = ethers.utils.solidityKeccak256(['string'], ['CANCELLER_ROLE']);
 
+const deployTimelockFixture = async () => {
+  const [admin, proposer, canceller, executor, other] = await ethers.getSigners()
+
+  const TimeLock = await ethers.getContractFactory("TimelockController");
+
+  const timelock = await TimeLock.deploy(MINDELAY, [proposer.address], [executor.address], admin.address)
+  await timelock.deployed()
+
+  expect(await timelock.hasRole(CANCELLER_ROLE, proposer.address)).to.be.equal(true);
+  await timelock.connect(admin).revokeRole(CANCELLER_ROLE, proposer.address);
+  await timelock.connect(admin).grantRole(CANCELLER_ROLE, canceller.address);
+
+  return { timelock, admin, proposer, canceller, executor, other };
+}
 
 describe("TimelockController", () => {
-  let admin: SignerWithAddress;
-  let proposer: SignerWithAddress;
-  let canceller: SignerWithAddress;
-  let executor: SignerWithAddress;
-  let other: SignerWithAddress;
-  let timelock: TimelockController;
-
-  const TIMELOCK_ADMIN_ROLE = ethers.utils.solidityKeccak256(['string'], ['TIMELOCK_ADMIN_ROLE']);
-  const PROPOSER_ROLE = ethers.utils.solidityKeccak256(['string'], ['PROPOSER_ROLE']);
-  const EXECUTOR_ROLE = ethers.utils.solidityKeccak256(['string'], ['EXECUTOR_ROLE']);
-  const CANCELLER_ROLE = ethers.utils.solidityKeccak256(['string'], ['CANCELLER_ROLE']);
-
-
-  beforeEach(async () => {
-
-    [admin, proposer, canceller, executor, other] = await ethers.getSigners()
-
-    const TimeLock = await ethers.getContractFactory("TimelockController");
-
-    timelock = await TimeLock.deploy(MINDELAY, [proposer.address], [executor.address], admin.address)
-    await timelock.deployed()
-
-    expect(await timelock.hasRole(CANCELLER_ROLE, proposer.address)).to.be.equal(true);
-    await timelock.connect(admin).revokeRole(CANCELLER_ROLE, proposer.address);
-    await timelock.connect(admin).grantRole(CANCELLER_ROLE, canceller.address);
-
-  })
 
   it('initial state', async () => {
+    const { timelock, proposer, canceller, executor } = await loadFixture(deployTimelockFixture);
     expect(await timelock.getMinDelay()).to.be.equal(MINDELAY);
     expect(await timelock.TIMELOCK_ADMIN_ROLE()).to.be.equal(TIMELOCK_ADMIN_ROLE);
     expect(await timelock.PROPOSER_ROLE()).to.be.equal(PROPOSER_ROLE);
@@ -97,7 +87,7 @@ describe("TimelockController", () => {
   });
 
   it('optional admin', async () => {
-
+    const { timelock, admin, proposer, executor, other } = await loadFixture(deployTimelockFixture);
     const TimeLock = await ethers.getContractFactory("TimelockController");
 
     const optional_timelock = await TimeLock.connect(other).deploy(MINDELAY, [proposer.address], [executor.address], ZERO_ADDRESS)
@@ -109,11 +99,11 @@ describe("TimelockController", () => {
 
   describe('methods', () => {
 
-    let operation;
 
     describe('operation hashing', () => {
       it('hashOperation', async () => {
-        operation = genOperation(
+        const { timelock } = await loadFixture(deployTimelockFixture);
+        const { id, target, value, data, predecessor, salt } = genOperation(
           '0x29cebefe301c6ce1bb36b58654fea275e1cacc83',
           '0xf94fdd6e21da21d2',
           '0xa3bc5104',
@@ -121,16 +111,17 @@ describe("TimelockController", () => {
           '0x60d9109846ab510ed75c15f979ae366a8a2ace11d34ba9788c13ac296db50e6e',
         );
         expect(await timelock.hashOperation(
-          operation.target,
-          operation.value,
-          operation.data,
-          operation.predecessor,
-          operation.salt,
-        )).to.be.equal(operation.id);
+          target,
+          value,
+          data,
+          predecessor,
+          salt,
+        )).to.be.equal(id);
       });
 
       it('hashOperationBatch', async () => {
-        operation = genOperationBatch(
+        const { timelock } = await loadFixture(deployTimelockFixture)
+        const { id, targets, values, payloads, predecessor, salt } = genOperationBatch(
           Array(8).fill('0x2d5f21620e56531c1d59c2df9b8e95d129571f71'),
           Array(8).fill('0x2b993cfce932ccee'),
           Array(8).fill('0xcf51966b'),
@@ -138,35 +129,29 @@ describe("TimelockController", () => {
           '0x8952d74c110f72bfe5accdf828c74d53a7dfb71235dfa8a1e8c75d8576b372ff',
         );
         expect(await timelock.hashOperationBatch(
-          operation.targets,
-          operation.values,
-          operation.payloads,
-          operation.predecessor,
-          operation.salt,
-        )).to.be.equal(operation.id);
+          targets,
+          values,
+          payloads,
+          predecessor,
+          salt,
+        )).to.be.equal(id);
       });
     });
 
     describe('simple', () => {
       describe('schedule', () => {
-        let id: string;
-        let target: Address;
-        let value: string;
-        let data: string;
-        let predecessor: string;
-        let salt: string;
 
-        beforeEach(async () => {
-          (operation = { id, target, value, data, predecessor, salt } = genOperation(
-            '0x31754f590B97fD975Eb86938f18Cc304E264D2F2',
-            '0',
-            '0x3bf92ccc',
-            ZERO_BYTES32,
-            random_salt,
-          ));
-        });
+        const { id, target, value, data, predecessor, salt } = genOperation(
+          '0x31754f590B97fD975Eb86938f18Cc304E264D2F2',
+          '0',
+          '0x3bf92ccc',
+          ZERO_BYTES32,
+          random_salt,
+        );
 
         it('proposer can schedule', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+
           const receipt = await (await timelock.connect(proposer).schedule(
             target,
             value,
@@ -198,6 +183,8 @@ describe("TimelockController", () => {
         });
 
         it('prevent overwriting active operation', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+
           await timelock.connect(proposer).schedule(
             target,
             value,
@@ -222,6 +209,8 @@ describe("TimelockController", () => {
 
 
         it('prevent non-proposer from committing', async () => {
+          const { timelock, other } = await loadFixture(deployTimelockFixture);
+
           await expectRevert(
             timelock.connect(other).schedule(
               target,
@@ -236,6 +225,9 @@ describe("TimelockController", () => {
         });
 
         it('enforce minimum delay', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+
+
           await expectRevert(
             timelock.connect(proposer).schedule(
               target,
@@ -250,6 +242,9 @@ describe("TimelockController", () => {
         });
 
         it('schedule operation with salt zero', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+
+
           const receipt = await (await timelock.connect(proposer).schedule(
             target,
             value,
@@ -267,24 +262,16 @@ describe("TimelockController", () => {
 
       describe('execute', () => {
 
-        let id: string;
-        let target: Address;
-        let value: string;
-        let data: string;
-        let predecessor: string;
-        let salt: string;
-
-        beforeEach(async () => {
-          (operation = { id, target, value, data, predecessor, salt } = genOperation(
-            '0xAe22104DCD970750610E6FE15E623468A98b15f7',
-            '0',
-            '0x13e414de',
-            ZERO_BYTES32,
-            '0xc1059ed2dc130227aa1d1d539ac94c641306905c020436c636e19e3fab56fc7f',
-          ));
-        });
+        const { id, target, value, data, predecessor, salt } = genOperation(
+          '0xAe22104DCD970750610E6FE15E623468A98b15f7',
+          '0',
+          '0x13e414de',
+          ZERO_BYTES32,
+          '0xc1059ed2dc130227aa1d1d539ac94c641306905c020436c636e19e3fab56fc7f',
+        );
 
         it('revert if operation is not scheduled', async () => {
+          const { timelock, executor } = await loadFixture(deployTimelockFixture);
           await expectRevert(
             timelock.connect(executor).execute(
               target,
@@ -298,7 +285,9 @@ describe("TimelockController", () => {
         });
 
         describe('with scheduled operation', () => {
-          beforeEach(async () => {
+
+          const scheduleFixture = async () => {
+            const { timelock, proposer } = await loadFixture(deployTimelockFixture);
             await timelock.connect(proposer).schedule(
               target,
               value,
@@ -307,10 +296,13 @@ describe("TimelockController", () => {
               salt,
               MINDELAY
             );
-          });
+          }
+
 
 
           it('revert if execution comes too early 1/2', async () => {
+            const { timelock, executor } = await loadFixture(deployTimelockFixture);
+            await loadFixture(scheduleFixture)
             await expectRevert(
               timelock.connect(executor).execute(
                 target,
@@ -324,7 +316,11 @@ describe("TimelockController", () => {
           });
 
           it('revert if execution comes too early 2/2', async () => {
-            const timestamp: any = await timelock.getTimestamp(id);
+            const { timelock, executor } = await loadFixture(deployTimelockFixture);
+            await loadFixture(scheduleFixture);
+            const timestamp = await timelock.getTimestamp(id);
+
+
             await time.increaseTo(timestamp - 5); // -1 is too tight, test sometime fails
 
             await expectRevert(
@@ -340,12 +336,13 @@ describe("TimelockController", () => {
           });
 
           describe('on time', () => {
-            beforeEach(async () => {
-              const timestamp = await timelock.getTimestamp(id);
-              await time.increaseTo(timestamp);
-            });
-
             it('executor can reveal', async () => {
+              const { timelock, executor } = await loadFixture(deployTimelockFixture);
+              await loadFixture(scheduleFixture)
+
+              const timestamp = await timelock.getTimestamp(id);
+              await time.increaseTo(timestamp)
+
               const receipt = await (await timelock.connect(executor).execute(
                 target,
                 value,
@@ -364,6 +361,13 @@ describe("TimelockController", () => {
             });
 
             it('prevent non-executor from revealing', async () => {
+              const { timelock, other } = await loadFixture(deployTimelockFixture);
+              await loadFixture(scheduleFixture)
+
+              const timestamp = await timelock.getTimestamp(id);
+              await time.increaseTo(timestamp)
+
+
               await expectRevert(
                 timelock.connect(other).execute(
                   target,
@@ -376,7 +380,6 @@ describe("TimelockController", () => {
               );
             });
           });
-
         });
       });
     });
@@ -386,25 +389,23 @@ describe("TimelockController", () => {
     describe('batch', () => {
       describe('schedule', () => {
 
-        let id: string;
-        let targets: Address[];
-        let values: string[];
-        let payloads: string[];
-        let predecessor: Address;
-        let salt: string;
-
-
-        beforeEach(async () => {
-          (operation = { id, targets, values, payloads, predecessor, salt } = genOperationBatch(
+        const genOperationBatchFixture = async () => {
+          const { id, targets, values, payloads, predecessor, salt } = genOperationBatch(
             Array(8).fill('0xEd912250835c812D4516BBD80BdaEA1bB63a293C'),
             Array(8).fill(0),
             Array(8).fill('0x2fcb7a88'),
             ZERO_BYTES32,
             '0x6cf9d042ade5de78bed9ffd075eb4b2a4f6b1736932c2dc8af517d6e066f51f5',
-          ));
-        });
+          );
+
+          return { id, targets, values, payloads, predecessor, salt };
+        }
+
 
         it('proposer can schedule', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+          const { id, targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
+
           const receipt = await (await timelock.connect(proposer).scheduleBatch(
             targets,
             values,
@@ -418,9 +419,9 @@ describe("TimelockController", () => {
           for (const i in targets) {
             expectEvent(receipt, 'CallScheduled', {
               id: id,
-              index: bn(i),
+              index: toEthersBN(i),
               target: targets[i],
-              value: bn(values[i]),
+              value: toEthersBN(values[i]),
               data: payloads[i],
               predecessor: predecessor,
               delay: MINDELAY,
@@ -440,6 +441,8 @@ describe("TimelockController", () => {
         });
 
         it('prevent overwriting active operation', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+          const { targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
           await timelock.connect(proposer).scheduleBatch(
             targets,
             values,
@@ -463,6 +466,8 @@ describe("TimelockController", () => {
         });
 
         it('length of batch parameter must match #1', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+          const { targets, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
           await expectRevert(
             timelock.connect(proposer).scheduleBatch(
               targets,
@@ -477,6 +482,8 @@ describe("TimelockController", () => {
         });
 
         it('length of batch parameter must match #2', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+          const { targets, values, predecessor, salt } = await loadFixture(genOperationBatchFixture);
           await expectRevert(
             timelock.connect(proposer).scheduleBatch(
               targets,
@@ -491,6 +498,8 @@ describe("TimelockController", () => {
         });
 
         it('prevent non-proposer from committing', async () => {
+          const { timelock, other } = await loadFixture(deployTimelockFixture);
+          const { targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
           await expectRevert(
             timelock.connect(other).scheduleBatch(
               targets,
@@ -504,6 +513,8 @@ describe("TimelockController", () => {
           );
         });
         it('enforce minimum delay', async () => {
+          const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+          const { targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
           await expectRevert(
             timelock.connect(proposer).scheduleBatch(
               targets,
@@ -520,24 +531,22 @@ describe("TimelockController", () => {
 
 
       describe('execute', () => {
-        let id: string;
-        let targets: Address[];
-        let values: string[];
-        let payloads: string[];
-        let predecessor: Address;
-        let salt: string;
 
-        beforeEach(async () => {
-          (operation = { id, targets, values, payloads, predecessor, salt } = genOperationBatch(
+        const genOperationBatchFixture = async () => {
+          const { id, targets, values, payloads, predecessor, salt } = genOperationBatch(
             Array(8).fill('0x76E53CcEb05131Ef5248553bEBDb8F70536830b1'),
             Array(8).fill(0),
             Array(8).fill('0x58a60f63'),
             ZERO_BYTES32,
             '0x9545eeabc7a7586689191f78a5532443698538e54211b5bd4d7dc0fc0102b5c7',
-          ));
-        });
+          );
+
+          return { id, targets, values, payloads, predecessor, salt };
+        }
 
         it('revert if operation is not scheduled', async () => {
+          const { timelock, executor } = await loadFixture(deployTimelockFixture);
+          const { targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
           await expectRevert(
             timelock.connect(executor).executeBatch(
               targets,
@@ -551,7 +560,10 @@ describe("TimelockController", () => {
         });
 
         describe('with scheduled operation', () => {
-          beforeEach(async () => {
+
+          const scheduleBatchFixture = async () => {
+            const { timelock, proposer } = await loadFixture(deployTimelockFixture);
+            const { targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
             await timelock.connect(proposer).scheduleBatch(
               targets,
               values,
@@ -559,11 +571,15 @@ describe("TimelockController", () => {
               predecessor,
               salt,
               MINDELAY
-            )
-          });
+            );
+          };
 
 
           it('revert if execution comes too early 1/2', async () => {
+            const { timelock, executor } = await loadFixture(deployTimelockFixture);
+            const { targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
+            await loadFixture(scheduleBatchFixture);
+
             await expectRevert(
               timelock.connect(executor).executeBatch(
                 targets,
@@ -577,6 +593,9 @@ describe("TimelockController", () => {
           });
 
           it('revert if execution comes too early 2/2', async () => {
+            const { timelock, executor } = await loadFixture(deployTimelockFixture);
+            const { targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
+            await loadFixture(scheduleBatchFixture);
 
             //await time.increaseTo( await time.latest() - 2); // -1 is to tight, test sometime fails
             const tx = timelock.connect(executor).executeBatch(
@@ -596,12 +615,14 @@ describe("TimelockController", () => {
           });
 
           describe('on time', () => {
-            beforeEach(async () => {
-              const timestamp = await timelock.getTimestamp(id);
-              await time.increaseTo(timestamp);
-            });
-
             it('executor can reveal', async () => {
+              const { timelock, executor } = await loadFixture(deployTimelockFixture);
+              const { id, targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
+              await loadFixture(scheduleBatchFixture);
+
+              const timestamp = await timelock.getTimestamp(id);
+              await time.increaseTo(timestamp)
+
               const receipt = await (await timelock.connect(executor).executeBatch(
                 targets,
                 values,
@@ -622,6 +643,13 @@ describe("TimelockController", () => {
 
 
             it('prevent non-executor from revealing', async () => {
+              const { timelock, other } = await loadFixture(deployTimelockFixture);
+              const { id, targets, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
+              await loadFixture(scheduleBatchFixture);
+
+              const timestamp = await timelock.getTimestamp(id);
+              await time.increaseTo(timestamp)
+
               await expectRevert(
                 timelock.connect(other).executeBatch(
                   targets,
@@ -635,6 +663,13 @@ describe("TimelockController", () => {
             });
 
             it('length mismatch #1', async () => {
+              const { timelock, executor } = await loadFixture(deployTimelockFixture);
+              const { id, values, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
+              await loadFixture(scheduleBatchFixture);
+
+              const timestamp = await timelock.getTimestamp(id);
+              await time.increaseTo(timestamp)
+
               await expectRevert(
                 timelock.connect(executor).executeBatch(
                   [],
@@ -648,6 +683,13 @@ describe("TimelockController", () => {
             });
 
             it('length mismatch #2', async () => {
+              const { timelock, executor } = await loadFixture(deployTimelockFixture);
+              const { id, targets, payloads, predecessor, salt } = await loadFixture(genOperationBatchFixture);
+              await loadFixture(scheduleBatchFixture);
+
+              const timestamp = await timelock.getTimestamp(id);
+              await time.increaseTo(timestamp);
+
               await expectRevert(
                 timelock.connect(executor).executeBatch(
                   targets,
@@ -661,6 +703,13 @@ describe("TimelockController", () => {
             });
 
             it('length mismatch #3', async () => {
+              const { timelock, executor } = await loadFixture(deployTimelockFixture);
+              const { id, targets, values, predecessor, salt } = await loadFixture(genOperationBatchFixture);
+              await loadFixture(scheduleBatchFixture);
+
+              const timestamp = await timelock.getTimestamp(id);
+              await time.increaseTo(timestamp);
+
               await expectRevert(
                 timelock.connect(executor).executeBatch(
                   targets,
@@ -678,16 +727,12 @@ describe("TimelockController", () => {
 
 
         it('partial execution', async () => {
-          let targets: Address[];
-          let values: string[];
-          let payloads: string[];
-          let predecessor: Address;
-          let salt: string;
 
+          const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
           const CallReceiverMock = await ethers.getContractFactory("CallReceiverMock");
-          const mock: CallReceiverMock = await CallReceiverMock.deploy();
+          const mock = await CallReceiverMock.deploy();
 
-          (operation = { id, targets, values, payloads, predecessor, salt } = genOperationBatch(
+          const { targets, values, payloads, predecessor, salt } = genOperationBatch(
             [mock.address, mock.address, mock.address],
             ['0', '0', '0'],
             [
@@ -697,7 +742,7 @@ describe("TimelockController", () => {
             ],
             ZERO_BYTES32,
             '0x8ac04aa0d6d66b8812fb41d39638d37af0a9ab11da507afd65c509f8ed079d3e',
-          ));
+          );
 
           await timelock.connect(proposer).scheduleBatch(
             targets,
@@ -725,22 +770,17 @@ describe("TimelockController", () => {
 
     describe('cancel', () => {
 
-      let id: string;
-      let target: Address;
-      let value: string;
-      let data: string;
-      let predecessor: string;
-      let salt: string;
+      const { id, target, value, data, predecessor, salt } = genOperation(
+        '0xC6837c44AA376dbe1d2709F13879E040CAb653ca',
+        '0',
+        '0x296e58dd',
+        ZERO_BYTES32,
+        '0xa2485763600634800df9fc9646fb2c112cf98649c55f63dd1d9c7d13a64399d9',
+      );
 
 
-      beforeEach(async () => {
-        ({ id, target, value, data, predecessor, salt } = genOperation(
-          '0xC6837c44AA376dbe1d2709F13879E040CAb653ca',
-          '0',
-          '0x296e58dd',
-          ZERO_BYTES32,
-          '0xa2485763600634800df9fc9646fb2c112cf98649c55f63dd1d9c7d13a64399d9',
-        ));
+      const scheduleFixture = async () => {
+        const { timelock, proposer } = await loadFixture(deployTimelockFixture);
         await timelock.connect(proposer).schedule(
           target,
           value,
@@ -749,14 +789,17 @@ describe("TimelockController", () => {
           salt,
           MINDELAY
         );
-      });
+      }
 
       it('canceller can cancel', async () => {
+        const { timelock, canceller } = await loadFixture(deployTimelockFixture);
+        await loadFixture(scheduleFixture);
         const tx = await (await timelock.connect(canceller).cancel(id)).wait();
         expect(tx).to.emit(timelock, "Cancelled").withArgs(id);
       });
 
       it('cannot cancel invalid operation', async () => {
+        const { timelock, canceller } = await loadFixture(deployTimelockFixture);
         await expectRevert(
           timelock.connect(canceller).cancel(ZERO_BYTES32),
           'TimelockController: operation cannot be cancelled',
@@ -764,6 +807,7 @@ describe("TimelockController", () => {
       });
 
       it('prevent non-canceller from canceling', async () => {
+        const { timelock, other } = await loadFixture(deployTimelockFixture);
         await expectRevert(
           timelock.connect(other).cancel(id),
           `AccessControl: account ${other.address.toLowerCase()} is missing role ${CANCELLER_ROLE}`,
@@ -775,25 +819,22 @@ describe("TimelockController", () => {
 
   describe('maintenance', () => {
     it('prevent unauthorized maintenance', async () => {
+      const { timelock, other } = await loadFixture(deployTimelockFixture);
       await expectRevert(timelock.connect(other).updateDelay(0), 'TimelockController: caller must be timelock');
     });
 
     it('timelock scheduled maintenance', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
       const newDelay = time.duration.hours(6);
-      let id: string;
-      let target: Address;
-      let value: string;
-      let data: string;
-      let predecessor: string;
-      let salt: string;
 
-      ({ id, target, value, data, predecessor, salt } = genOperation(
+
+      const { target, value, data, predecessor, salt } = genOperation(
         timelock.address,
         '0',
         timelock.interface.encodeFunctionData('updateDelay', [newDelay.toString()]),
         ZERO_BYTES32,
         '0xf8e775b2c5f4d66fb5c7fa800f35ef518c262b6014b3c0aee6ea21bff157f108',
-      ));
+      )
 
       await timelock.connect(proposer).schedule(
         target,
@@ -818,24 +859,52 @@ describe("TimelockController", () => {
   });
 
   describe('dependency', () => {
-    let operation1: any;
-    let operation2: any;
 
-    beforeEach(async () => {
-      operation1 = genOperation(
-        '0xdE66bD4c97304200A95aE0AadA32d6d01A867E39',
-        '0',
-        '0x01dc731a',
-        ZERO_BYTES32,
-        '0x64e932133c7677402ead2926f86205e2ca4686aebecf5a8077627092b9bb2feb',
+    const operation1 = genOperation(
+      '0xdE66bD4c97304200A95aE0AadA32d6d01A867E39',
+      '0',
+      '0x01dc731a',
+      ZERO_BYTES32,
+      '0x64e932133c7677402ead2926f86205e2ca4686aebecf5a8077627092b9bb2feb',
+    );
+    const operation2 = genOperation(
+      '0x3c7944a3F1ee7fc8c5A5134ba7c79D11c3A1FCa3',
+      '0',
+      '0x8f531849',
+      operation1.id,
+      '0x036e1311cac523f9548e6461e29fb1f8f9196b91910a41711ea22f5de48df07d',
+    );
+
+
+    it('cannot execute before dependency', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+
+      await timelock.connect(proposer).schedule(
+        operation2.target,
+        operation2.value,
+        operation2.data,
+        operation2.predecessor,
+        operation2.salt,
+        MINDELAY,
       );
-      operation2 = genOperation(
-        '0x3c7944a3F1ee7fc8c5A5134ba7c79D11c3A1FCa3',
-        '0',
-        '0x8f531849',
-        operation1.id,
-        '0x036e1311cac523f9548e6461e29fb1f8f9196b91910a41711ea22f5de48df07d',
+
+      await time.increase(MINDELAY);
+
+      await expectRevert(
+        timelock.connect(executor).execute(
+          operation2.target,
+          operation2.value,
+          operation2.data,
+          operation2.predecessor,
+          operation2.salt,
+        ),
+        'TimelockController: missing dependency',
       );
+    });
+
+    it('can execute after dependency', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+
       await timelock.connect(proposer).schedule(
         operation1.target,
         operation1.value,
@@ -852,23 +921,10 @@ describe("TimelockController", () => {
         operation2.salt,
         MINDELAY,
       );
+
       await time.increase(MINDELAY);
-    });
 
-    it('cannot execute before dependency', async () => {
-      await expectRevert(
-        timelock.connect(executor).execute(
-          operation2.target,
-          operation2.value,
-          operation2.data,
-          operation2.predecessor,
-          operation2.salt,
-        ),
-        'TimelockController: missing dependency',
-      );
-    });
 
-    it('can execute after dependency', async () => {
       await timelock.connect(executor).execute(
         operation1.target,
         operation1.value,
@@ -888,38 +944,33 @@ describe("TimelockController", () => {
 
 
   describe('usage scenario', () => {
-    let _addr: SignerWithAddress;
-    let implementation2: Implementation2;
-    let mock: CallReceiverMock;
 
-    beforeEach(async () => {
-      [_addr] = await ethers.getSigners()
+
+
+    const deployImplementation2Fixture = async () => {
+      const [_addr] = await ethers.getSigners()
 
       const Implementation2 = await ethers.getContractFactory("Implementation2");
 
-      implementation2 = await Implementation2.deploy()
+      const impl2 = await Implementation2.deploy()
       const CallReceiverMock = await ethers.getContractFactory("CallReceiverMock");
-      mock = await CallReceiverMock.deploy()
-    });
+      const mock = await CallReceiverMock.deploy()
 
-    let id: string;
-    let target: Address;
-    let value: string;
-    let data: string;
-    let predecessor: string;
-    let salt: string;
-
+      return { _addr, impl2, mock }
+    }
 
 
     it('call', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+      const { impl2 } = await loadFixture(deployImplementation2Fixture);
 
-      ({ id, target, value, data, predecessor, salt } = genOperation(
-        implementation2.address,
+      const { target, value, data, predecessor, salt } = genOperation(
+        impl2.address,
         '0',
-        implementation2.interface.encodeFunctionData('setValue', [42]),
+        impl2.interface.encodeFunctionData('setValue', [42]),
         ZERO_BYTES32,
         '0x8043596363daefc89977b25f9d9b4d06c3910959ef0c4d213557a903e1b555e2',
-      ));
+      );
 
       await timelock.connect(proposer).schedule(
         target,
@@ -938,23 +989,21 @@ describe("TimelockController", () => {
         salt,
       );
 
-      expect(await implementation2.getValue()).to.be.equal(42);
+      expect(await impl2.getValue()).to.be.equal(42);
     });
 
     it('call reverting', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+      const { mock } = await loadFixture(deployImplementation2Fixture);
 
-      let target: Address;
-      let value: string;
-      let data: string;
-      let predecessor: string;
-      let salt: string;
-      ({ target, value, data, predecessor, salt } = genOperation(
+
+      const { target, value, data, predecessor, salt } = genOperation(
         mock.address,
         '0',
         mock.interface.encodeFunctionData('mockFunctionRevertsNoReason'),
         ZERO_BYTES32,
         '0xb1b1b276fdf1a28d1e00537ea73b04d56639128b08063c1a2f70a52e38cba693',
-      ));
+      );
 
       await timelock.connect(proposer).schedule(
         target,
@@ -965,7 +1014,6 @@ describe("TimelockController", () => {
         MINDELAY,
       );
 
-
       await time.increase(MINDELAY);
 
       await expectRevert(
@@ -975,6 +1023,8 @@ describe("TimelockController", () => {
     });
 
     it('call throw', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+      const { mock } = await loadFixture(deployImplementation2Fixture);
       const operation = genOperation(
         mock.address,
         '0',
@@ -999,6 +1049,8 @@ describe("TimelockController", () => {
     });
 
     it('call out of gas', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+      const { mock } = await loadFixture(deployImplementation2Fixture);
       const operation = genOperation(
         mock.address,
         '0',
@@ -1023,6 +1075,8 @@ describe("TimelockController", () => {
     });
 
     it('call payable with eth', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+      const { mock } = await loadFixture(deployImplementation2Fixture);
       const operation = genOperation(
         mock.address,
         '1',
@@ -1059,6 +1113,8 @@ describe("TimelockController", () => {
     });
 
     it('call nonpayable with eth', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+      const { mock } = await loadFixture(deployImplementation2Fixture);
       const operation = genOperation(
         mock.address,
         '1',
@@ -1091,6 +1147,8 @@ describe("TimelockController", () => {
 
 
     it('call reverting with eth', async () => {
+      const { timelock, proposer, executor } = await loadFixture(deployTimelockFixture);
+      const { mock } = await loadFixture(deployImplementation2Fixture);
       const operation = genOperation(
         mock.address,
         '1',
@@ -1125,4 +1183,3 @@ describe("TimelockController", () => {
 });
 
 
-*/

@@ -89,14 +89,6 @@ declare module "hardhat/types/runtime" {
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.Ink_Governor__factory>;
     getContractFactory(
-      name: "Ink_Timelock_Governor",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.Ink_Timelock_Governor__factory>;
-    getContractFactory(
-      name: "Ink_Votes",
-      signerOrOptions?: ethers.Signer | FactoryOptions
-    ): Promise<Contracts.Ink_Votes__factory>;
-    getContractFactory(
       name: "IERC5267",
       signerOrOptions?: ethers.Signer | FactoryOptions
     ): Promise<Contracts.IERC5267__factory>;
@@ -268,16 +260,6 @@ declare module "hardhat/types/runtime" {
       address: string,
       signer?: ethers.Signer
     ): Promise<Contracts.Ink_Governor>;
-    getContractAt(
-      name: "Ink_Timelock_Governor",
-      address: string,
-      signer?: ethers.Signer
-    ): Promise<Contracts.Ink_Timelock_Governor>;
-    getContractAt(
-      name: "Ink_Votes",
-      address: string,
-      signer?: ethers.Signer
-    ): Promise<Contracts.Ink_Votes>;
     getContractAt(
       name: "IERC5267",
       address: string,

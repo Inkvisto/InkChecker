@@ -9,6 +9,4 @@ export * as security from "./security";
 export * as utils from "./utils";
 export { Governor_Token__factory } from "./Governor_Token__factory";
 export { Ink_Governor__factory } from "./Ink_Governor__factory";
-export { Ink_Timelock_Governor__factory } from "./Ink_Timelock_Governor__factory";
-export { Ink_Votes__factory } from "./Ink_Votes__factory";
 export { Timelock_Governor__factory } from "./Timelock_Governor__factory";

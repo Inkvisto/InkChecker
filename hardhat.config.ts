@@ -1,11 +1,12 @@
 import { HardhatUserConfig, subtask } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "@nomiclabs/hardhat-ethers";
+import "@nomiclabs/hardhat-etherscan";
 import "@nomiclabs/hardhat-solhint";
 import "hardhat-deploy";
 import "hardhat-contract-sizer";
 import "hardhat-forta";
-
+import "hardhat-gas-reporter"
 
 import {TASK_COMPILE_SOLIDITY_GET_SOURCE_PATHS} from 'hardhat/builtin-tasks/task-names'
 import { getJsonRpcUrl } from "forta-agent";
@@ -44,7 +45,7 @@ const config: HardhatUserConfig = {
     }
   },
   gasReporter: {
-    enabled:true,
+    enabled:false,
     coinmarketcap:'313f8a67-62dd-4bf1-86e6-431538f803a9'
   },
 
