@@ -32,7 +32,8 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     args: [100, [proposer], [executor], deployer],
     log: true
   });
-
+  
+  
 
 
   const gov = await deploy('Timelock_Governor', {
@@ -46,6 +47,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
 
   const saveContractsInfo = async (contracts: DeployResult[]) => {
+
     const contractsDir = path.join(__dirname, '/..', 'client/contracts')
     
 
