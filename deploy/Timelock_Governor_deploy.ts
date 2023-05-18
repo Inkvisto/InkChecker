@@ -21,17 +21,12 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
   const { deployer, proposer, executor } = await getNamedAccounts();
 
 
-  const token = await deploy('Governor_Token', {
+ /* const token = await deploy('Governor_Token', {
     from: deployer,
     args: [],
     log: true
   });
 
-  const timelock = await deploy('TimelockController', {
-    from: deployer,
-    args: [100, [proposer], [executor], deployer],
-    log: true
-  });
   
   
 
@@ -42,8 +37,16 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
     log: true
   });
 
+*/
+//  const deployedContacts = [token,timelock,gov];
 
-  const deployedContacts = [token,timelock,gov];
+const timelock = await deploy('TimelockController', {
+  from: deployer,
+  args: [100, [proposer], [executor], deployer],
+  log: true
+});
+
+
 
 
   const saveContractsInfo = async (contracts: DeployResult[]) => {
@@ -73,7 +76,7 @@ const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
 
 
 
-  await saveContractsInfo(deployedContacts);
+  await saveContractsInfo([timelock]);
  
 
   
