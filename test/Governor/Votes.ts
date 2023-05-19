@@ -9,8 +9,6 @@ import { Ink_Votes } from '../../typechain-types/Ink_Votes';
 import { eip712 } from '../utils/eip712';
 import { MAX_UINT256, nonce, ZERO_ADDRESS } from '../utils/constants'
 
-/*
-
 describe("Votes", function () {
   let votes: Ink_Votes;
   let owner: SignerWithAddress;
@@ -452,4 +450,3 @@ describe("Votes", function () {
 
 });
 
-*/

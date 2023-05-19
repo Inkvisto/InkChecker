@@ -8,7 +8,7 @@ import { eip712 } from '../utils/eip712';
 import { ProposalState, tokenSupply, VoteType, votingDelay, votingPeriod, ZERO_ADDRESS } from '../utils/constants'
 import GovernorHelper from './GovernorHelper'
 import { toEthersBN } from '../utils/typeConverters';
-/*
+
 describe("Governor", () => {
 
   const value = toEthersBN(1);
@@ -696,4 +696,3 @@ describe("Governor", () => {
 
   });
 });
-*/
